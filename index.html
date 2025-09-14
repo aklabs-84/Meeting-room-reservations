@@ -69,6 +69,14 @@
                             <input type="text" id="bookerName" required 
                                    class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-white/70">
                         </div>
+                        <!-- 예약 비밀번호 -->
+                        <div class="space-y-2">
+                        <label class="block text-sm font-medium text-gray-700">예약 비밀번호</label>
+                        <input type="password" id="bookingPassword" required minlength="4" maxlength="20"
+                                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 bg-white/70"
+                                placeholder="삭제/수정을 위한 비밀번호 (4~20자)">
+                        </div>
+
 
                         <!-- 회의실 선택 -->
                         <div class="space-y-2">
@@ -266,12 +274,14 @@
 
     <script>
         // 구글 앱스 스크립트 웹앱 URL (여기에 실제 URL을 입력하세요)
-        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx07GaunGFSsIkoC7Rbem7_fVTAwB3pN9MAALRrUa4q6xZNbW5E_N5FjH6c-4b3Z6NS/exec';
+        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby46_csMsujjbu96vJvY1gpYsrtjEN_FppjOuVtInC3E4tKdhFSmQCjCKm6BM2SfDtZ/exec';
 
         // 전역 변수
         let currentDate = new Date();
         let allBookings = [];
         let isLoading = false;
+        let modalAlertTimer = null;
+
 
         // 페이지 로드 시 초기화
         document.addEventListener('DOMContentLoaded', function() {
@@ -283,7 +293,8 @@
             
             // 오늘 날짜를 기본값으로 설정
             const today = new Date();
-            document.getElementById('bookingDate').valueAsDate = today;
+            setBookingDateToToday();
+
             
             // 예약 목록 로드
             loadBookings();
@@ -308,6 +319,50 @@
 
         makeAllTimes(startTimeSelect); // 시작: 전체
         makeAllTimes(endTimeSelect);   // 종료: (초기엔) 전체
+        }
+
+        function setBookingDateToToday() {
+            const el = document.getElementById('bookingDate');
+            if (!el) return;
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            el.value = `${y}-${m}-${d}`;  // type="date"에 맞는 포맷
+        }
+
+
+
+        // 모달 알림 표시 유틸
+        function setModalAlert(type, text) {
+            const box = document.getElementById('modalAlert');
+            if (!box) return;
+
+            // 기존 타이머 있으면 해제
+            if (modalAlertTimer) {
+                clearTimeout(modalAlertTimer);
+                modalAlertTimer = null;
+            }
+
+            const base = 'p-3 rounded-lg border text-sm mb-3 transition-opacity duration-200';
+            const styles = type === 'error'
+                ? ' bg-rose-50 text-rose-700 border-rose-200'
+                : ' bg-emerald-50 text-emerald-700 border-emerald-200';
+
+            // 즉시 보여주기
+            box.className = base + styles;
+            box.textContent = text;
+            box.classList.remove('hidden');
+            box.style.opacity = '1';
+
+            // 3초 뒤 페이드아웃 후 숨김
+            modalAlertTimer = setTimeout(() => {
+                box.style.opacity = '0';
+                setTimeout(() => {
+                box.classList.add('hidden');
+                box.style.opacity = '';
+                }, 200); // transition-duration과 동일
+            }, 3000);
         }
 
 
@@ -376,8 +431,6 @@
         }
         }
 
-
-
         // 예약 제출 처리 (수정된 버전)
         async function handleBookingSubmit(e) {
             e.preventDefault();
@@ -390,7 +443,8 @@
                 purpose: document.getElementById('purpose').value.trim(),
                 bookingDate: document.getElementById('bookingDate').value,
                 startTime: document.getElementById('startTime').value,
-                endTime: document.getElementById('endTime').value
+                endTime: document.getElementById('endTime').value,
+                password: document.getElementById('bookingPassword').value
             };
 
             // 클라이언트 측 유효성 검사 (서버 검사와 별도로)
@@ -433,6 +487,7 @@
                     // 폼 초기화
                     document.getElementById('bookingForm').reset();
                     document.getElementById('endTime').innerHTML = '<option value="">종료 시간 선택</option>';
+                    setBookingDateToToday();   // ← 폼 리셋 후 다시 오늘 날짜로
                     
                     // 예약 목록 새로고침
                     await loadBookings();
@@ -500,8 +555,6 @@
         // (알림) 서버 정책: 12:00 이전은 거절될 수 있음 — UI 정책과 다르면 안내 메시지 표시 고려
         return true;
         }
-
-
 
         // 필드명 한국어 변환
         function getFieldName(field) {
@@ -692,51 +745,101 @@
 
         // 예약 상세 정보 모달 표시 (수정된 버전)
         function showBookingDetails(date, bookings) {
-            const modalContent = document.getElementById('modalContent');
-            modalContent.innerHTML = '';
+        const modalContent = document.getElementById('modalContent');
+        modalContent.innerHTML = '';
 
-            const dateTitle = document.createElement('h4');
-            dateTitle.className = 'font-semibold text-gray-800 mb-4 text-lg';
-            dateTitle.textContent = `${formatDateKorean(date)} 예약 현황`;
-            modalContent.appendChild(dateTitle);
+        const dateTitle = document.createElement('h4');
+        dateTitle.className = 'font-semibold text-gray-800 mb-4 text-lg';
+        dateTitle.textContent = `${formatDateKorean(date)} 예약 현황`;
+        modalContent.appendChild(dateTitle);
 
-            bookings.forEach(booking => {
-                const bookingDiv = document.createElement('div');
-                bookingDiv.className = 'border border-gray-200 rounded-xl p-4 mb-3 bg-gradient-to-r from-blue-50 to-indigo-50';
-                bookingDiv.innerHTML = `
-                    <div class="flex items-center gap-2 mb-2">
-                        <div class="w-6 h-6 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                            ${booking.회의실}
-                        </div>
-                        <div class="font-semibold text-gray-800">${booking.회의실}호</div>
-                    </div>
-                    <div class="text-sm text-gray-600 space-y-1 ml-8">
-                        <div class="flex items-center gap-2">
-                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                            </svg>
-                            <span>예약자: ${booking.예약자}</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <span>시간: ${booking.시작시간} ~ ${booking.종료시간}</span>
-                        </div>
-                        <div class="flex items-start gap-2">
-                            <svg class="w-4 h-4 text-gray-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                            <span>목적: ${booking.예약목적}</span>
-                        </div>
-                    </div>
-                `;
-                modalContent.appendChild(bookingDiv);
+        // ✅ 알림 영역: 모달 상단에 1개만
+        const alertBox = document.createElement('div');
+        alertBox.id = 'modalAlert';
+        alertBox.className = 'hidden p-3 rounded-lg border text-sm mb-3';
+        modalContent.appendChild(alertBox);
+
+        bookings.forEach(booking => {
+            const bookingDiv = document.createElement('div');
+            bookingDiv.className = 'border border-gray-200 rounded-xl p-4 mb-3 bg-gradient-to-r from-blue-50 to-indigo-50';
+            bookingDiv.innerHTML = `
+            <div class="flex items-center gap-2 mb-2">
+                <div class="font-semibold text-gray-800">${booking.회의실}호</div>
+            </div>
+            <div class="text-sm text-gray-600 space-y-1 ml-8">
+                <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <span>예약자: ${booking.예약자}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>시간: ${booking.시작시간} ~ ${booking.종료시간}</span>
+                </div>
+                <div class="flex items-start gap-2">
+                <svg class="w-4 h-4 text-gray-500 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <span>목적: ${booking.예약목적}</span>
+                </div>
+            </div>
+            <div class="mt-3 ml-8">
+                <button class="px-3 py-1.5 text-sm rounded-lg bg-gradient-to-r from-rose-500 to-red-600 text-white hover:from-rose-600 hover:to-red-700"
+                        data-resvid="${booking.예약ID}">
+                삭제
+                </button>
+            </div>
+            `;
+
+            // 삭제 버튼 핸들러
+            const delBtn = bookingDiv.querySelector('button[data-resvid]');
+            if (delBtn) {
+            delBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const reservationId = delBtn.getAttribute('data-resvid');
+                if (!reservationId) {
+                setModalAlert('error', '이 예약은 삭제 ID가 없어 삭제할 수 없습니다.');
+                return;
+                }
+                const pw = prompt('예약 시 설정한 비밀번호를 입력하세요.');
+                if (!pw) return;
+
+                try {
+                setLoading(true);
+                const resp = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify({ action: 'deleteBooking', reservationId, password: pw })
+                });
+                const result = await resp.json();
+
+                if (result.status === 'success') {
+                    showMessage('예약이 삭제되었습니다.', 'success');
+                    closeModal();
+                    await loadBookings();
+                    renderCalendar();
+                } else {
+                    // ❗비번 오류 등은 모달 상단에 표시
+                    setModalAlert('error', result.message || '비밀번호가 일치하지 않습니다.');
+                }
+                } catch (err) {
+                setModalAlert('error', '삭제 중 오류: ' + err.message);
+                } finally {
+                setLoading(false);
+                }
             });
+            }
 
-            document.getElementById('bookingModal').classList.remove('hidden');
-            document.getElementById('bookingModal').classList.add('flex');
+            modalContent.appendChild(bookingDiv);
+        });
+
+        document.getElementById('bookingModal').classList.remove('hidden');
+        document.getElementById('bookingModal').classList.add('flex');
         }
+
 
         // 날짜를 한국어 형식으로 변환
         function formatDateKorean(dateString) {
